@@ -1,0 +1,161 @@
+{
+  "name": "estate-management-app",
+  "version": "4.0.0",
+  "description": "تطبيق شامل لإدارة الاستثمارات العقارية والعقود والأقساط والشركاء والخزينة",
+  "main": "index.html",
+  "scripts": {
+    "start": "npx serve .",
+    "dev": "npx live-server --port=8000 --open=/",
+    "build": "echo 'No build process needed - static files only'",
+    "test": "echo 'No tests specified'",
+    "lint": "echo 'No linting configured'",
+    "format": "prettier --write '*.{js,css,html,json}'",
+    "serve": "npx serve . -p 8000",
+    "serve-https": "npx serve . -p 8000 --ssl-cert",
+    "analyze": "npx lighthouse http://localhost:8000 --output=html --output-path=./lighthouse-report.html"
+  },
+  "keywords": [
+    "real-estate",
+    "management",
+    "property",
+    "investment",
+    "contracts",
+    "installments",
+    "treasury",
+    "pwa",
+    "offline",
+    "arabic",
+    "rtl"
+  ],
+  "author": {
+    "name": "Jules",
+    "email": "developer@example.com",
+    "url": "https://github.com/your-repo"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-repo/estate-management-app.git"
+  },
+  "bugs": {
+    "url": "https://github.com/your-repo/estate-management-app/issues"
+  },
+  "homepage": "https://github.com/your-repo/estate-management-app#readme",
+  "engines": {
+    "node": ">=14.0.0",
+    "npm": ">=6.0.0"
+  },
+  "devDependencies": {
+    "serve": "^14.2.0",
+    "live-server": "^1.2.2",
+    "prettier": "^3.0.0",
+    "lighthouse": "^11.0.0"
+  },
+  "optionalDependencies": {
+    "http-server": "^14.1.1",
+    "python": "^3.8.0"
+  },
+  "browserslist": [
+    "> 1%",
+    "last 2 versions",
+    "not dead",
+    "not ie 11"
+  ],
+  "pwa": {
+    "name": "مدير الاستثمار العقاري",
+    "short_name": "مدير العقارات",
+    "description": "تطبيق شامل لإدارة الاستثمارات العقارية",
+    "start_url": "/",
+    "display": "standalone",
+    "theme_color": "#2563eb",
+    "background_color": "#0b1020"
+  },
+  "config": {
+    "port": 8000,
+    "host": "localhost"
+  },
+  "files": [
+    "index.html",
+    "app.js",
+    "db.js",
+    "style.css",
+    "sw.js",
+    "manifest.json",
+    "README.md"
+  ],
+  "directories": {
+    "lib": ".",
+    "test": "test",
+    "docs": "docs"
+  },
+  "funding": {
+    "type": "individual",
+    "url": "https://github.com/sponsors/your-username"
+  },
+  "contributors": [
+    {
+      "name": "Jules",
+      "email": "developer@example.com"
+    }
+  ],
+  "maintainers": [
+    {
+      "name": "Jules",
+      "email": "developer@example.com"
+    }
+  ],
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ],
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "workspaces": [
+    "."
+  ],
+  "overrides": {},
+  "resolutions": {},
+  "packageManager": "npm@8.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./index.html",
+    "./app": "./app.js",
+    "./db": "./db.js",
+    "./style": "./style.css"
+  },
+  "imports": {
+    "#/*": "./*"
+  },
+  "dependencies": {},
+  "peerDependencies": {},
+  "peerDependenciesMeta": {},
+  "bundledDependencies": [],
+  "optionalDependencies": {},
+  "deprecated": false,
+  "gypfile": false,
+  "lib": [],
+  "bin": {},
+  "man": [],
+  "config": {
+    "port": 8000,
+    "host": "localhost"
+  },
+  "scripts": {
+    "start": "npx serve .",
+    "dev": "npx live-server --port=8000 --open=/",
+    "build": "echo 'No build process needed - static files only'",
+    "test": "echo 'No tests specified'",
+    "lint": "echo 'No linting configured'",
+    "format": "prettier --write '*.{js,css,html,json}'",
+    "serve": "npx serve . -p 8000",
+    "serve-https": "npx serve . -p 8000 --ssl-cert",
+    "analyze": "npx lighthouse http://localhost:8000 --output=html --output-path=./lighthouse-report.html"
+  }
+}
