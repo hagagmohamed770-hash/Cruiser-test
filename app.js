@@ -758,17 +758,32 @@ function renderUnits() {
             return (colsA[sort.idx] + '').localeCompare(colsB[sort.idx] + '') * (sort.dir === 'asc' ? 1 : -1);
         });
         
-        const rows = list.map(unit => [
-            `<a href="#" data-nav-id="unit-details" data-nav-param="${unit.id}">${unit.name || ''}</a>`,
-            unit.code || '',
-            unit.building || '',
-            unit.floor || '',
-            unit.status || 'متاحة',
-            `<button class="btn secondary" data-del-coll="units" data-del-id="${unit.id}">حذف</button>`
-        ]);
+        const rows = list.map(unit => {
+            const unitContracts = state.contracts?.filter(c => c.unitId === unit.id) || [];
+            const activeContract = unitContracts.find(c => c.status === 'نشط');
+            const unitInstallments = state.installments?.filter(i => {
+                const contract = state.contracts?.find(c => c.id === i.contractId);
+                return contract && contract.unitId === unit.id;
+            }) || [];
+            const paidInstallments = unitInstallments.filter(i => i.paid).length;
+            const totalInstallments = unitInstallments.length;
+            
+            return [
+                `<a href="#" data-nav-id="unit-details" data-nav-param="${unit.id}">${unit.name || ''}</a>`,
+                unit.code || '',
+                unit.building || '',
+                unit.floor || '',
+                unit.area ? `${unit.area} م²` : '',
+                egp(unit.price),
+                unit.status || 'متاحة',
+                activeContract ? `<span class="badge warn">مؤجرة</span>` : `<span class="badge ok">متاحة</span>`,
+                totalInstallments > 0 ? `${paidInstallments}/${totalInstallments}` : '-',
+                `<button class="btn secondary" data-del-coll="units" data-del-id="${unit.id}">حذف</button>`
+            ];
+        });
         
         document.getElementById('u-list').innerHTML = table(
-            ['اسم الوحدة', 'الرمز', 'العمارة', 'الدور', 'الحالة', ''],
+            ['اسم الوحدة', 'الرمز', 'العمارة', 'الدور', 'المساحة', 'السعر', 'الحالة', 'الحالة الفعلية', 'الأقساط', ''],
             rows,
             sort,
             (newSort) => {
@@ -790,10 +805,19 @@ function renderUnits() {
                 </div>
                 <input class="input" id="u-area" placeholder="المساحة (م²)" style="margin-top:10px;">
                 <input class="input" id="u-price" placeholder="السعر" style="margin-top:10px;">
+                <select class="select" id="u-type" style="margin-top:10px;">
+                    <option value="شقة">شقة</option>
+                    <option value="محل">محل</option>
+                    <option value="مكتب">مكتب</option>
+                    <option value="مستودع">مستودع</option>
+                    <option value="فيلا">فيلا</option>
+                </select>
                 <select class="select" id="u-status" style="margin-top:10px;">
                     <option value="متاحة">متاحة</option>
                     <option value="مؤجرة">مؤجرة</option>
                     <option value="مباعة">مباعة</option>
+                    <option value="قيد التطوير">قيد التطوير</option>
+                    <option value="صيانة">صيانة</option>
                 </select>
                 <textarea class="input" id="u-notes" placeholder="ملاحظات" style="margin-top:10px;" rows="2"></textarea>
                 <button class="btn" id="add-unit-btn" style="margin-top:10px;">حفظ</button>
@@ -802,6 +826,14 @@ function renderUnits() {
                 <h3>الوحدات</h3>
                 <div class="tools">
                     <input class="input" id="u-q" placeholder="بحث..." oninput="draw()">
+                    <select class="select" id="u-filter-status" onchange="draw()">
+                        <option value="">جميع الحالات</option>
+                        <option value="متاحة">متاحة</option>
+                        <option value="مؤجرة">مؤجرة</option>
+                        <option value="مباعة">مباعة</option>
+                        <option value="قيد التطوير">قيد التطوير</option>
+                        <option value="صيانة">صيانة</option>
+                    </select>
                     <button class="btn secondary" id="export-units-csv">CSV</button>
                     <button class="btn" id="print-units-pdf">طباعة PDF</button>
                 </div>
@@ -819,6 +851,7 @@ function renderUnits() {
         const floor = document.getElementById('u-floor').value.trim();
         const area = document.getElementById('u-area').value.trim();
         const price = document.getElementById('u-price').value.trim();
+        const type = document.getElementById('u-type').value;
         const status = document.getElementById('u-status').value;
         const notes = document.getElementById('u-notes').value.trim();
         
@@ -839,8 +872,10 @@ function renderUnits() {
             floor,
             area: parseNumber(area),
             price: parseNumber(price),
+            type,
             status,
-            notes
+            notes,
+            createdAt: new Date().toISOString()
         };
         
         if (!state.units) state.units = [];
@@ -848,7 +883,8 @@ function renderUnits() {
         logAction('إضافة وحدة جديدة', {
             id: newUnit.id,
             name: newUnit.name,
-            code: newUnit.code
+            code: newUnit.code,
+            type: newUnit.type
         });
         
         await persist();
@@ -909,18 +945,30 @@ function renderContracts() {
         const rows = list.map(contract => {
             const unit = unitById(contract.unitId);
             const customer = custById(contract.customerId);
+            const contractInstallments = state.installments?.filter(i => i.contractId === contract.id) || [];
+            const paidInstallments = contractInstallments.filter(i => i.paid).length;
+            const totalInstallments = contractInstallments.length;
+            const totalPaid = contractInstallments.filter(i => i.paid).reduce((sum, i) => sum + (i.amount || 0), 0);
+            const remainingAmount = (contract.amount || 0) - totalPaid;
+            
             return [
                 `<a href="#" data-nav-id="contract-details" data-nav-param="${contract.id}">${unit?.name || ''}</a>`,
                 customer?.name || '',
                 contract.type || '',
                 contract.status || 'نشط',
                 contract.startDate || '',
-                `<button class="btn secondary" data-del-coll="contracts" data-del-id="${contract.id}">حذف</button>`
+                contract.endDate || '',
+                egp(contract.amount),
+                egp(totalPaid),
+                egp(remainingAmount),
+                totalInstallments > 0 ? `${paidInstallments}/${totalInstallments}` : '-',
+                `<button class="btn secondary" data-del-coll="contracts" data-del-id="${contract.id}">حذف</button>
+                 ${contract.status === 'نشط' ? `<button class="btn warn" data-end-contract="${contract.id}">إنهاء</button>` : ''}`
             ];
         });
         
         document.getElementById('contract-list').innerHTML = table(
-            ['الوحدة', 'العميل', 'النوع', 'الحالة', 'تاريخ البداية', ''],
+            ['الوحدة', 'العميل', 'النوع', 'الحالة', 'تاريخ البداية', 'تاريخ الانتهاء', 'قيمة العقد', 'المدفوع', 'المتبقي', 'الأقساط', 'الإجراءات'],
             rows,
             sort,
             (newSort) => {
@@ -936,7 +984,7 @@ function renderContracts() {
                 <h3>إنشاء عقد جديد</h3>
                 <select class="select" id="contract-unit" style="margin-bottom:10px;">
                     <option value="">اختر الوحدة</option>
-                    ${(state.units || []).map(u => `<option value="${u.id}">${u.name} - ${u.code}</option>`).join('')}
+                    ${(state.units || []).filter(u => u.status === 'متاحة').map(u => `<option value="${u.id}">${u.name} - ${u.code}</option>`).join('')}
                 </select>
                 <select class="select" id="contract-customer" style="margin-bottom:10px;">
                     <option value="">اختر العميل</option>
@@ -945,9 +993,22 @@ function renderContracts() {
                 <select class="select" id="contract-type" style="margin-bottom:10px;">
                     <option value="إيجار">إيجار</option>
                     <option value="بيع">بيع</option>
+                    <option value="إيجار مع خيار الشراء">إيجار مع خيار الشراء</option>
                 </select>
-                <input class="input" id="contract-start-date" type="date" style="margin-bottom:10px;">
+                <div class="grid grid-2" style="gap: 10px; margin-bottom:10px;">
+                    <input class="input" id="contract-start-date" type="date" placeholder="تاريخ البداية">
+                    <input class="input" id="contract-end-date" type="date" placeholder="تاريخ الانتهاء">
+                </div>
                 <input class="input" id="contract-amount" placeholder="قيمة العقد" style="margin-bottom:10px;">
+                <input class="input" id="contract-monthly-amount" placeholder="المبلغ الشهري (للإيجار)" style="margin-bottom:10px;">
+                <input class="input" id="contract-deposit" placeholder="الوديعة" style="margin-bottom:10px;">
+                <select class="select" id="contract-payment-method" style="margin-bottom:10px;">
+                    <option value="شهري">شهري</option>
+                    <option value="ربع سنوي">ربع سنوي</option>
+                    <option value="نصف سنوي">نصف سنوي</option>
+                    <option value="سنوي">سنوي</option>
+                    <option value="مقدم">مقدم</option>
+                </select>
                 <textarea class="input" id="contract-notes" placeholder="ملاحظات" rows="2" style="margin-bottom:10px;"></textarea>
                 <button class="btn" id="create-contract-btn">إنشاء العقد</button>
             </div>
@@ -955,6 +1016,18 @@ function renderContracts() {
                 <h3>العقود</h3>
                 <div class="tools">
                     <input class="input" id="contract-q" placeholder="بحث..." oninput="draw()">
+                    <select class="select" id="contract-filter-status" onchange="draw()">
+                        <option value="">جميع الحالات</option>
+                        <option value="نشط">نشط</option>
+                        <option value="منتهي">منتهي</option>
+                        <option value="ملغي">ملغي</option>
+                    </select>
+                    <select class="select" id="contract-filter-type" onchange="draw()">
+                        <option value="">جميع الأنواع</option>
+                        <option value="إيجار">إيجار</option>
+                        <option value="بيع">بيع</option>
+                        <option value="إيجار مع خيار الشراء">إيجار مع خيار الشراء</option>
+                    </select>
                     <button class="btn secondary" id="export-contracts-csv">CSV</button>
                     <button class="btn" id="print-contracts-pdf">طباعة PDF</button>
                 </div>
@@ -970,11 +1043,21 @@ function renderContracts() {
         const customerId = document.getElementById('contract-customer').value;
         const type = document.getElementById('contract-type').value;
         const startDate = document.getElementById('contract-start-date').value;
+        const endDate = document.getElementById('contract-end-date').value;
         const amount = document.getElementById('contract-amount').value.trim();
+        const monthlyAmount = document.getElementById('contract-monthly-amount').value.trim();
+        const deposit = document.getElementById('contract-deposit').value.trim();
+        const paymentMethod = document.getElementById('contract-payment-method').value;
         const notes = document.getElementById('contract-notes').value.trim();
         
         if (!unitId || !customerId || !startDate || !amount) {
             return alert('الرجاء ملء جميع الحقول المطلوبة.');
+        }
+
+        // Check if unit is available
+        const unit = unitById(unitId);
+        if (unit.status !== 'متاحة') {
+            return alert('هذه الوحدة غير متاحة للعقد.');
         }
 
         saveState();
@@ -984,18 +1067,67 @@ function renderContracts() {
             customerId,
             type,
             startDate,
+            endDate,
             amount: parseNumber(amount),
+            monthlyAmount: parseNumber(monthlyAmount),
+            deposit: parseNumber(deposit),
+            paymentMethod,
             status: 'نشط',
-            notes
+            notes,
+            createdAt: new Date().toISOString()
         };
         
         if (!state.contracts) state.contracts = [];
         state.contracts.push(newContract);
+        
+        // Update unit status
+        unit.status = 'مؤجرة';
+        
+        // Create automatic installments if monthly amount is provided
+        if (newContract.monthlyAmount && newContract.monthlyAmount > 0) {
+            const installments = [];
+            const startDate = new Date(newContract.startDate);
+            const endDate = newContract.endDate ? new Date(newContract.endDate) : new Date(startDate.getFullYear() + 1, startDate.getMonth(), startDate.getDate());
+            
+            let currentDate = new Date(startDate);
+            let installmentNumber = 1;
+            
+            while (currentDate <= endDate) {
+                const newInstallment = {
+                    id: uid('I'),
+                    contractId: newContract.id,
+                    amount: newContract.monthlyAmount,
+                    dueDate: currentDate.toISOString().slice(0, 10),
+                    paymentMethod: newContract.paymentMethod,
+                    paid: false,
+                    penalty: 0,
+                    notes: `قسط رقم ${installmentNumber}`,
+                    createdAt: new Date().toISOString()
+                };
+                
+                installments.push(newInstallment);
+                
+                // Move to next month
+                currentDate.setMonth(currentDate.getMonth() + 1);
+                installmentNumber++;
+            }
+            
+            if (!state.installments) state.installments = [];
+            state.installments.push(...installments);
+            
+            logAction('إنشاء أقساط تلقائية للعقد', {
+                contractId: newContract.id,
+                count: installments.length,
+                amount: newContract.monthlyAmount
+            });
+        }
+        
         logAction('إنشاء عقد جديد', {
             id: newContract.id,
             unitId: newContract.unitId,
             customerId: newContract.customerId,
-            type: newContract.type
+            type: newContract.type,
+            amount: newContract.amount
         });
         
         await persist();
@@ -1169,13 +1301,17 @@ function renderInstallments() {
             const unit = unitById(contract?.unitId);
             const customer = custById(contract?.customerId);
             const isOverdue = !installment.paid && new Date(installment.dueDate) < new Date();
+            const daysOverdue = isOverdue ? Math.floor((new Date() - new Date(installment.dueDate)) / (1000 * 60 * 60 * 24)) : 0;
             
             return [
                 `${unit?.name || ''} - ${customer?.name || ''}`,
                 installment.dueDate || '',
                 egp(installment.amount),
                 installment.paid ? '<span class="badge ok">مدفوع</span>' : 
-                    isOverdue ? '<span class="badge warn">متأخر</span>' : '<span class="badge info">غير مدفوع</span>',
+                    isOverdue ? `<span class="badge warn">متأخر ${daysOverdue} يوم</span>` : '<span class="badge info">غير مدفوع</span>',
+                installment.paymentDate || '-',
+                egp(installment.penalty || 0),
+                installment.paymentMethod || '-',
                 `<button class="btn ${installment.paid ? 'secondary' : 'ok'}" onclick="toggleInstallmentPayment('${installment.id}')">
                     ${installment.paid ? 'إلغاء الدفع' : 'تسجيل الدفع'}
                 </button>`
@@ -1183,7 +1319,7 @@ function renderInstallments() {
         });
         
         document.getElementById('installment-list').innerHTML = table(
-            ['العقد', 'تاريخ الاستحقاق', 'المبلغ', 'الحالة', 'الإجراء'],
+            ['العقد', 'تاريخ الاستحقاق', 'المبلغ', 'الحالة', 'تاريخ الدفع', 'الغرامة', 'طريقة الدفع', 'الإجراء'],
             rows,
             sort,
             (newSort) => {
@@ -1199,7 +1335,7 @@ function renderInstallments() {
                 <h3>إضافة قسط جديد</h3>
                 <select class="select" id="installment-contract" style="margin-bottom:10px;">
                     <option value="">اختر العقد</option>
-                    ${(state.contracts || []).map(c => {
+                    ${(state.contracts || []).filter(c => c.status === 'نشط').map(c => {
                         const unit = unitById(c.unitId);
                         const customer = custById(c.customerId);
                         return `<option value="${c.id}">${unit?.name || ''} - ${customer?.name || ''}</option>`;
@@ -1207,13 +1343,46 @@ function renderInstallments() {
                 </select>
                 <input class="input" id="installment-amount" placeholder="المبلغ" style="margin-bottom:10px;">
                 <input class="input" id="installment-due-date" type="date" style="margin-bottom:10px;">
+                <select class="select" id="installment-payment-method" style="margin-bottom:10px;">
+                    <option value="نقداً">نقداً</option>
+                    <option value="تحويل بنكي">تحويل بنكي</option>
+                    <option value="شيك">شيك</option>
+                    <option value="بطاقة ائتمان">بطاقة ائتمان</option>
+                </select>
                 <textarea class="input" id="installment-notes" placeholder="ملاحظات" rows="2" style="margin-bottom:10px;"></textarea>
                 <button class="btn" id="add-installment-btn">حفظ</button>
+                
+                <hr style="margin: 20px 0;">
+                <h4>إنشاء أقساط تلقائية</h4>
+                <select class="select" id="auto-contract" style="margin-bottom:10px;">
+                    <option value="">اختر العقد</option>
+                    ${(state.contracts || []).filter(c => c.status === 'نشط').map(c => {
+                        const unit = unitById(c.unitId);
+                        const customer = custById(c.customerId);
+                        return `<option value="${c.id}">${unit?.name || ''} - ${customer?.name || ''}</option>`;
+                    }).join('')}
+                </select>
+                <input class="input" id="auto-start-date" type="date" placeholder="تاريخ أول قسط" style="margin-bottom:10px;">
+                <input class="input" id="auto-amount" placeholder="مبلغ كل قسط" style="margin-bottom:10px;">
+                <input class="input" id="auto-count" placeholder="عدد الأقساط" type="number" style="margin-bottom:10px;">
+                <select class="select" id="auto-frequency" style="margin-bottom:10px;">
+                    <option value="1">شهري</option>
+                    <option value="3">ربع سنوي</option>
+                    <option value="6">نصف سنوي</option>
+                    <option value="12">سنوي</option>
+                </select>
+                <button class="btn secondary" id="create-auto-installments-btn">إنشاء أقساط تلقائية</button>
             </div>
             <div class="card">
                 <h3>الأقساط</h3>
                 <div class="tools">
                     <input class="input" id="installment-q" placeholder="بحث..." oninput="draw()">
+                    <select class="select" id="installment-filter-status" onchange="draw()">
+                        <option value="">جميع الحالات</option>
+                        <option value="paid">مدفوع</option>
+                        <option value="unpaid">غير مدفوع</option>
+                        <option value="overdue">متأخر</option>
+                    </select>
                     <button class="btn secondary" id="export-installments-csv">CSV</button>
                     <button class="btn" id="print-installments-pdf">طباعة PDF</button>
                 </div>
@@ -1228,6 +1397,7 @@ function renderInstallments() {
         const contractId = document.getElementById('installment-contract').value;
         const amount = document.getElementById('installment-amount').value.trim();
         const dueDate = document.getElementById('installment-due-date').value;
+        const paymentMethod = document.getElementById('installment-payment-method').value;
         const notes = document.getElementById('installment-notes').value.trim();
         
         if (!contractId || !amount || !dueDate) {
@@ -1240,13 +1410,20 @@ function renderInstallments() {
             contractId,
             amount: parseNumber(amount),
             dueDate,
+            paymentMethod,
             paid: false,
-            notes
+            penalty: 0,
+            notes,
+            createdAt: new Date().toISOString()
         };
         
         if (!state.installments) state.installments = [];
         state.installments.push(newInstallment);
-        logAction('إضافة قسط جديد', { id: newInstallment.id, amount: newInstallment.amount });
+        logAction('إضافة قسط جديد', { 
+            id: newInstallment.id, 
+            contractId: newInstallment.contractId,
+            amount: newInstallment.amount 
+        });
         
         await persist();
 
@@ -1254,9 +1431,69 @@ function renderInstallments() {
         document.getElementById('installment-contract').value = '';
         document.getElementById('installment-amount').value = '';
         document.getElementById('installment-due-date').value = '';
+        document.getElementById('installment-payment-method').value = 'نقداً';
         document.getElementById('installment-notes').value = '';
         
         draw();
+    });
+
+    // Auto create installments
+    document.getElementById('create-auto-installments-btn').addEventListener('click', async () => {
+        const contractId = document.getElementById('auto-contract').value;
+        const startDate = document.getElementById('auto-start-date').value;
+        const amount = document.getElementById('auto-amount').value.trim();
+        const count = parseInt(document.getElementById('auto-count').value);
+        const frequency = parseInt(document.getElementById('auto-frequency').value);
+        
+        if (!contractId || !startDate || !amount || !count) {
+            return alert('الرجاء ملء جميع الحقول المطلوبة.');
+        }
+
+        if (count <= 0 || count > 120) {
+            return alert('عدد الأقساط يجب أن يكون بين 1 و 120.');
+        }
+
+        saveState();
+        const installments = [];
+        
+        for (let i = 0; i < count; i++) {
+            const dueDate = new Date(startDate);
+            dueDate.setMonth(dueDate.getMonth() + (i * frequency));
+            
+            const newInstallment = {
+                id: uid('I'),
+                contractId,
+                amount: parseNumber(amount),
+                dueDate: dueDate.toISOString().slice(0, 10),
+                paymentMethod: 'نقداً',
+                paid: false,
+                penalty: 0,
+                notes: `قسط رقم ${i + 1}`,
+                createdAt: new Date().toISOString()
+            };
+            
+            installments.push(newInstallment);
+        }
+        
+        if (!state.installments) state.installments = [];
+        state.installments.push(...installments);
+        
+        logAction('إنشاء أقساط تلقائية', { 
+            contractId,
+            count: installments.length,
+            amount: parseNumber(amount)
+        });
+        
+        await persist();
+
+        // Clear form
+        document.getElementById('auto-contract').value = '';
+        document.getElementById('auto-start-date').value = '';
+        document.getElementById('auto-amount').value = '';
+        document.getElementById('auto-count').value = '';
+        
+        draw();
+        alert(`تم إنشاء ${count} قسط بنجاح.`);
     });
 }
 
@@ -2234,16 +2471,42 @@ async function toggleInstallmentPayment(installmentId) {
     const installment = state.installments?.find(i => i.id === installmentId);
     if (!installment) return;
 
-    saveState();
-    installment.paid = !installment.paid;
-    logAction(installment.paid ? 'تسجيل دفع قسط' : 'إلغاء دفع قسط', { 
-        id: installment.id, 
-        amount: installment.amount 
-    });
-    await persist();
-    
-    // Refresh the page
-    renderInstallments();
+    if (installment.paid) {
+        // Cancel payment
+        if (confirm('هل أنت متأكد من إلغاء الدفع؟')) {
+            saveState();
+            installment.paid = false;
+            installment.paymentDate = null;
+            installment.penalty = 0;
+            logAction('إلغاء دفع قسط', { 
+                id: installment.id, 
+                amount: installment.amount 
+            });
+            await persist();
+            renderInstallments();
+        }
+    } else {
+        // Record payment
+        const paymentDate = prompt('تاريخ الدفع (YYYY-MM-DD):', today());
+        const penalty = prompt('الغرامة (إذا وجدت):', '0');
+        const paymentMethod = prompt('طريقة الدفع:', installment.paymentMethod || 'نقداً');
+        
+        if (paymentDate) {
+            saveState();
+            installment.paid = true;
+            installment.paymentDate = paymentDate;
+            installment.penalty = parseNumber(penalty);
+            installment.paymentMethod = paymentMethod;
+            logAction('تسجيل دفع قسط', { 
+                id: installment.id, 
+                amount: installment.amount,
+                paymentDate,
+                penalty: installment.penalty
+            });
+            await persist();
+            renderInstallments();
+        }
+    }
 }
 
 // Toggle debt payment
@@ -2669,4 +2932,31 @@ function exportAllDataAsCSV() {
     });
     
     return csvData.join('\n');
+}
+
+// End contract function
+async function endContract(contractId) {
+    const contract = state.contracts?.find(c => c.id === contractId);
+    if (!contract) return;
+    
+    if (confirm('هل أنت متأكد من إنهاء هذا العقد؟')) {
+        saveState();
+        contract.status = 'منتهي';
+        contract.endDate = today();
+        
+        // Update unit status to available
+        const unit = unitById(contract.unitId);
+        if (unit) {
+            unit.status = 'متاحة';
+        }
+        
+        logAction('إنهاء عقد', {
+            id: contract.id,
+            unitId: contract.unitId,
+            customerId: contract.customerId
+        });
+        
+        await persist();
+        renderContracts();
+    }
 }
