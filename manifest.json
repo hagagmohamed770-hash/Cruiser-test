@@ -1,10 +1,192 @@
 {
   "name": "مدير الاستثمار العقاري",
   "short_name": "مدير العقارات",
-  "description": "تطبيق لإدارة الاستثمارات العقارية مع دعم للعمل دون اتصال.",
-  "start_url": "/index.html",
+  "description": "تطبيق شامل لإدارة الاستثمارات العقارية والعقود والأقساط والشركاء والخزينة",
+  "version": "4.0.0",
+  "start_url": "/",
   "display": "standalone",
-  "background_color": "#0b1020",
+  "orientation": "portrait-primary",
   "theme_color": "#2563eb",
-  "icons": []
+  "background_color": "#0b1020",
+  "scope": "/",
+  "lang": "ar",
+  "dir": "rtl",
+  
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏛️</text></svg>",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏛️</text></svg>",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  
+  "categories": [
+    "business",
+    "finance",
+    "productivity",
+    "utilities"
+  ],
+  
+  "screenshots": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1280 720'><rect width='100%' height='100%' fill='%230b1020'/><text x='50%' y='50%' text-anchor='middle' fill='white' font-size='48'>مدير الاستثمار العقاري</text></svg>",
+      "sizes": "1280x720",
+      "type": "image/svg+xml",
+      "form_factor": "wide",
+      "label": "لوحة التحكم الرئيسية"
+    },
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 390 844'><rect width='100%' height='100%' fill='%230b1020'/><text x='50%' y='50%' text-anchor='middle' fill='white' font-size='24'>مدير الاستثمار العقاري</text></svg>",
+      "sizes": "390x844",
+      "type": "image/svg+xml",
+      "form_factor": "narrow",
+      "label": "واجهة الهاتف المحمول"
+    }
+  ],
+  
+  "shortcuts": [
+    {
+      "name": "لوحة التحكم",
+      "short_name": "الرئيسية",
+      "description": "الانتقال إلى لوحة التحكم الرئيسية",
+      "url": "/?view=dash",
+      "icons": [
+        {
+          "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><text y='.9em' font-size='72'>📊</text></svg>",
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "العملاء",
+      "short_name": "العملاء",
+      "description": "إدارة العملاء",
+      "url": "/?view=customers",
+      "icons": [
+        {
+          "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><text y='.9em' font-size='72'>👥</text></svg>",
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "الوحدات",
+      "short_name": "الوحدات",
+      "description": "إدارة الوحدات العقارية",
+      "url": "/?view=units",
+      "icons": [
+        {
+          "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><text y='.9em' font-size='72'>🏢</text></svg>",
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "العقود",
+      "short_name": "العقود",
+      "description": "إدارة العقود والأقساط",
+      "url": "/?view=contracts",
+      "icons": [
+        {
+          "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><text y='.9em' font-size='72'>📄</text></svg>",
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "الخزينة",
+      "short_name": "الخزينة",
+      "description": "إدارة الخزينة والمعاملات المالية",
+      "url": "/?view=treasury",
+      "icons": [
+        {
+          "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><text y='.9em' font-size='72'>💰</text></svg>",
+          "sizes": "96x96"
+        }
+      ]
+    }
+  ],
+  
+  "related_applications": [],
+  "prefer_related_applications": false,
+  
+  "edge_side_panel": {
+    "preferred_width": 400
+  },
+  
+  "launch_handler": {
+    "client_mode": "navigate-existing"
+  },
+  
+  "protocol_handlers": [
+    {
+      "protocol": "web+estate",
+      "url": "/?action=%s"
+    }
+  ],
+  
+  "file_handlers": [
+    {
+      "action": "/",
+      "accept": {
+        "application/json": [".json"],
+        "text/csv": [".csv"]
+      }
+    }
+  ],
+  
+  "share_target": {
+    "action": "/",
+    "method": "GET",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  },
+  
+  "permissions": [
+    "storage",
+    "notifications"
+  ],
+  
+  "author": {
+    "name": "Jules",
+    "email": "developer@example.com"
+  },
+  
+  "homepage_url": "https://github.com/your-repo/estate-management-app",
+  
+  "developer": {
+    "name": "Jules",
+    "url": "https://github.com/your-repo"
+  },
+  
+  "features": [
+    "Cross Platform",
+    "Offline Support",
+    "Real-time Updates",
+    "Data Export",
+    "Print Reports"
+  ],
+  
+  "keywords": [
+    "عقارات",
+    "إدارة",
+    "عقود",
+    "أقساط",
+    "خزينة",
+    "عملاء",
+    "شركاء",
+    "تقارير",
+    "مالية",
+    "استثمار"
+  ]
 }
