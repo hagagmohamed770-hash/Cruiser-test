@@ -798,27 +798,995 @@ async function endContract(contractId) {
 
 // Placeholder functions for other screens
 function renderBrokers() {
-    view.innerHTML = '<div class="card"><h2>السماسرة</h2><p>قريباً...</p></div>';
+    let sort = { idx: 0, dir: 'asc' };
+
+    function draw() {
+        const query = (document.getElementById('broker-q')?.value || '').trim().toLowerCase();
+        let list = state.brokers?.slice() || [];
+        
+        if (query) {
+            list = list.filter(broker => {
+                const searchable = `${broker.name || ''} ${broker.phone || ''} ${broker.commission || ''}`.toLowerCase();
+                return searchable.includes(query);
+            });
+        }
+        
+        list.sort((a, b) => {
+            const colsA = [a.name || '', a.phone || '', a.commission || '', a.status || ''];
+            const colsB = [b.name || '', b.phone || '', b.commission || '', b.status || ''];
+            return (colsA[sort.idx] + '').localeCompare(colsB[sort.idx] + '') * (sort.dir === 'asc' ? 1 : -1);
+        });
+        
+        const rows = list.map(broker => [
+            broker.name || '',
+            broker.phone || '',
+            broker.commission || '0%',
+            broker.status || 'نشط',
+            `<button class="btn secondary" onclick="delRow('brokers', '${broker.id}')">حذف</button>`
+        ]);
+        
+        document.getElementById('broker-list').innerHTML = table(
+            ['اسم السمسار', 'الهاتف', 'العمولة', 'الحالة', ''],
+            rows,
+            sort,
+            (newSort) => {
+                sort = newSort;
+                draw();
+            }
+        );
+    }
+
+    view.innerHTML = `
+        <div class="grid grid-2">
+            <div class="card">
+                <h3>إضافة سمسار</h3>
+                <input class="input" id="broker-name" placeholder="اسم السمسار">
+                <input class="input" id="broker-phone" placeholder="رقم الهاتف">
+                <input class="input" id="broker-commission" placeholder="نسبة العمولة (%)">
+                <select class="select" id="broker-status">
+                    <option value="نشط">نشط</option>
+                    <option value="موقوف">موقوف</option>
+                </select>
+                <textarea class="input" id="broker-notes" placeholder="ملاحظات" rows="2"></textarea>
+                <button class="btn" id="add-broker-btn">حفظ</button>
+            </div>
+            <div class="card">
+                <h3>السماسرة</h3>
+                <div class="tools">
+                    <input class="input" id="broker-q" placeholder="بحث..." oninput="draw()" style="width: 200px; margin-bottom: 0;">
+                </div>
+                <div id="broker-list"></div>
+            </div>
+        </div>`;
+
+    draw();
+
+    // Event Listeners
+    document.getElementById('add-broker-btn').onclick = async () => {
+        const name = document.getElementById('broker-name').value.trim();
+        const phone = document.getElementById('broker-phone').value.trim();
+        const commission = document.getElementById('broker-commission').value.trim();
+        const status = document.getElementById('broker-status').value;
+        const notes = document.getElementById('broker-notes').value.trim();
+        
+        if (!name || !phone) {
+            return alert('الرجاء إدخال اسم السمسار ورقم الهاتف.');
+        }
+
+        saveState();
+        const newBroker = {
+            id: uid('B'),
+            name,
+            phone,
+            commission: parseNumber(commission),
+            status,
+            notes
+        };
+        
+        if (!state.brokers) state.brokers = [];
+        state.brokers.push(newBroker);
+        logAction('إضافة سمسار جديد', { id: newBroker.id, name: newBroker.name });
+        
+        await persist();
+
+        // Clear form
+        document.getElementById('broker-name').value = '';
+        document.getElementById('broker-phone').value = '';
+        document.getElementById('broker-commission').value = '';
+        document.getElementById('broker-notes').value = '';
+        
+        draw();
+    };
 }
 
 function renderInstallments() {
-    view.innerHTML = '<div class="card"><h2>الأقساط</h2><p>قريباً...</p></div>';
+    let sort = { idx: 0, dir: 'asc' };
+    
+    function draw() {
+        const query = (document.getElementById('installment-q')?.value || '').trim().toLowerCase();
+        let list = state.installments?.slice() || [];
+        
+        if (query) {
+            list = list.filter(installment => {
+                const contract = state.contracts?.find(c => c.id === installment.contractId);
+                const unit = unitById(contract?.unitId);
+                const customer = custById(contract?.customerId);
+                const searchable = `${unit?.name || ''} ${customer?.name || ''} ${installment.amount || ''}`.toLowerCase();
+                return searchable.includes(query);
+            });
+        }
+        
+        list.sort((a, b) => {
+            const colsA = [a.dueDate || '', a.amount || '', a.paid ? 'مدفوع' : 'غير مدفوع', ''];
+            const colsB = [b.dueDate || '', b.amount || '', b.paid ? 'مدفوع' : 'غير مدفوع', ''];
+            return (colsA[sort.idx] + '').localeCompare(colsB[sort.idx] + '') * (sort.dir === 'asc' ? 1 : -1);
+        });
+        
+        const rows = list.map(installment => {
+            const contract = state.contracts?.find(c => c.id === installment.contractId);
+            const unit = unitById(contract?.unitId);
+            const customer = custById(contract?.customerId);
+            const isOverdue = !installment.paid && new Date(installment.dueDate) < new Date();
+            const daysOverdue = isOverdue ? Math.floor((new Date() - new Date(installment.dueDate)) / (1000 * 60 * 60 * 24)) : 0;
+            
+            return [
+                `${unit?.name || ''} - ${customer?.name || ''}`,
+                installment.dueDate || '',
+                egp(installment.amount),
+                installment.paid ? '<span style="color: green;">مدفوع</span>' : 
+                    isOverdue ? `<span style="color: red;">متأخر ${daysOverdue} يوم</span>` : '<span style="color: orange;">غير مدفوع</span>',
+                installment.paymentDate || '-',
+                egp(installment.penalty || 0),
+                installment.paymentMethod || '-',
+                `<button class="btn ${installment.paid ? 'secondary' : 'ok'}" onclick="toggleInstallmentPayment('${installment.id}')">
+                    ${installment.paid ? 'إلغاء الدفع' : 'تسجيل الدفع'}
+                </button>`
+            ];
+        });
+        
+        document.getElementById('installment-list').innerHTML = table(
+            ['العقد', 'تاريخ الاستحقاق', 'المبلغ', 'الحالة', 'تاريخ الدفع', 'الغرامة', 'طريقة الدفع', 'الإجراء'],
+            rows,
+            sort,
+            (newSort) => {
+                sort = newSort;
+                draw();
+            }
+        );
+    }
+
+    view.innerHTML = `
+        <div class="grid grid-2">
+            <div class="card">
+                <h3>إضافة قسط جديد</h3>
+                <select class="select" id="installment-contract">
+                    <option value="">اختر العقد</option>
+                    ${(state.contracts || []).filter(c => c.status === 'نشط').map(c => {
+                        const unit = unitById(c.unitId);
+                        const customer = custById(c.customerId);
+                        return `<option value="${c.id}">${unit?.name || ''} - ${customer?.name || ''}</option>`;
+                    }).join('')}
+                </select>
+                <input class="input" id="installment-amount" placeholder="المبلغ">
+                <input class="input" id="installment-due-date" type="date">
+                <select class="select" id="installment-payment-method">
+                    <option value="نقداً">نقداً</option>
+                    <option value="تحويل بنكي">تحويل بنكي</option>
+                    <option value="شيك">شيك</option>
+                    <option value="بطاقة ائتمان">بطاقة ائتمان</option>
+                </select>
+                <textarea class="input" id="installment-notes" placeholder="ملاحظات" rows="2"></textarea>
+                <button class="btn" id="add-installment-btn">حفظ</button>
+                
+                <hr style="margin: 20px 0;">
+                <h4>إنشاء أقساط تلقائية</h4>
+                <select class="select" id="auto-contract">
+                    <option value="">اختر العقد</option>
+                    ${(state.contracts || []).filter(c => c.status === 'نشط').map(c => {
+                        const unit = unitById(c.unitId);
+                        const customer = custById(c.customerId);
+                        return `<option value="${c.id}">${unit?.name || ''} - ${customer?.name || ''}</option>`;
+                    }).join('')}
+                </select>
+                <input class="input" id="auto-start-date" type="date" placeholder="تاريخ أول قسط">
+                <input class="input" id="auto-amount" placeholder="مبلغ كل قسط">
+                <input class="input" id="auto-count" placeholder="عدد الأقساط" type="number">
+                <select class="select" id="auto-frequency">
+                    <option value="1">شهري</option>
+                    <option value="3">ربع سنوي</option>
+                    <option value="6">نصف سنوي</option>
+                    <option value="12">سنوي</option>
+                </select>
+                <button class="btn secondary" id="create-auto-installments-btn">إنشاء أقساط تلقائية</button>
+            </div>
+            <div class="card">
+                <h3>الأقساط</h3>
+                <div class="tools">
+                    <input class="input" id="installment-q" placeholder="بحث..." oninput="draw()" style="width: 200px; margin-bottom: 0;">
+                </div>
+                <div id="installment-list"></div>
+            </div>
+        </div>`;
+
+    draw();
+
+    // Event Listeners
+    document.getElementById('add-installment-btn').onclick = async () => {
+        const contractId = document.getElementById('installment-contract').value;
+        const amount = document.getElementById('installment-amount').value.trim();
+        const dueDate = document.getElementById('installment-due-date').value;
+        const paymentMethod = document.getElementById('installment-payment-method').value;
+        const notes = document.getElementById('installment-notes').value.trim();
+        
+        if (!contractId || !amount || !dueDate) {
+            return alert('الرجاء ملء جميع الحقول المطلوبة.');
+        }
+
+        saveState();
+        const newInstallment = {
+            id: uid('I'),
+            contractId,
+            amount: parseNumber(amount),
+            dueDate,
+            paymentMethod,
+            paid: false,
+            penalty: 0,
+            notes,
+            createdAt: new Date().toISOString()
+        };
+        
+        if (!state.installments) state.installments = [];
+        state.installments.push(newInstallment);
+        logAction('إضافة قسط جديد', { 
+            id: newInstallment.id, 
+            contractId: newInstallment.contractId,
+            amount: newInstallment.amount 
+        });
+        
+        await persist();
+
+        // Clear form
+        document.getElementById('installment-contract').value = '';
+        document.getElementById('installment-amount').value = '';
+        document.getElementById('installment-due-date').value = '';
+        document.getElementById('installment-payment-method').value = 'نقداً';
+        document.getElementById('installment-notes').value = '';
+        
+        draw();
+    };
+
+    // Auto create installments
+    document.getElementById('create-auto-installments-btn').onclick = async () => {
+        const contractId = document.getElementById('auto-contract').value;
+        const startDate = document.getElementById('auto-start-date').value;
+        const amount = document.getElementById('auto-amount').value.trim();
+        const count = parseInt(document.getElementById('auto-count').value);
+        const frequency = parseInt(document.getElementById('auto-frequency').value);
+        
+        if (!contractId || !startDate || !amount || !count) {
+            return alert('الرجاء ملء جميع الحقول المطلوبة.');
+        }
+
+        if (count <= 0 || count > 120) {
+            return alert('عدد الأقساط يجب أن يكون بين 1 و 120.');
+        }
+
+        saveState();
+        const installments = [];
+        
+        for (let i = 0; i < count; i++) {
+            const dueDate = new Date(startDate);
+            dueDate.setMonth(dueDate.getMonth() + (i * frequency));
+            
+            const newInstallment = {
+                id: uid('I'),
+                contractId,
+                amount: parseNumber(amount),
+                dueDate: dueDate.toISOString().slice(0, 10),
+                paymentMethod: 'نقداً',
+                paid: false,
+                penalty: 0,
+                notes: `قسط رقم ${i + 1}`,
+                createdAt: new Date().toISOString()
+            };
+            
+            installments.push(newInstallment);
+        }
+        
+        if (!state.installments) state.installments = [];
+        state.installments.push(...installments);
+        
+        logAction('إنشاء أقساط تلقائية', { 
+            contractId,
+            count: installments.length,
+            amount: parseNumber(amount)
+        });
+        
+        await persist();
+
+        // Clear form
+        document.getElementById('auto-contract').value = '';
+        document.getElementById('auto-start-date').value = '';
+        document.getElementById('auto-amount').value = '';
+        document.getElementById('auto-count').value = '';
+        
+        draw();
+        alert(`تم إنشاء ${count} قسط بنجاح.`);
+    };
 }
 
 function renderVouchers() {
-    view.innerHTML = '<div class="card"><h2>السندات</h2><p>قريباً...</p></div>';
+    let sort = { idx: 0, dir: 'asc' };
+
+    function draw() {
+        const query = (document.getElementById('voucher-q')?.value || '').trim().toLowerCase();
+        let list = state.vouchers?.slice() || [];
+        
+        if (query) {
+            list = list.filter(voucher => {
+                const searchable = `${voucher.type || ''} ${voucher.description || ''} ${voucher.amount || ''}`.toLowerCase();
+                return searchable.includes(query);
+            });
+        }
+        
+        list.sort((a, b) => {
+            const colsA = [a.date || '', a.type || '', a.amount || '', a.safeId || ''];
+            const colsB = [b.date || '', b.type || '', b.amount || '', b.safeId || ''];
+            return (colsA[sort.idx] + '').localeCompare(colsB[sort.idx] + '') * (sort.dir === 'asc' ? 1 : -1);
+        });
+        
+        const rows = list.map(voucher => {
+            const safe = state.safes?.find(s => s.id === voucher.safeId);
+            return [
+                voucher.date || '',
+                voucher.type || '',
+                voucher.description || '',
+                egp(voucher.amount),
+                safe?.name || '',
+                `<button class="btn secondary" onclick="delRow('vouchers', '${voucher.id}')">حذف</button>`
+            ];
+        });
+        
+        document.getElementById('voucher-list').innerHTML = table(
+            ['التاريخ', 'النوع', 'الوصف', 'المبلغ', 'الخزنة', ''],
+            rows,
+            sort,
+            (newSort) => {
+                sort = newSort;
+                draw();
+            }
+        );
+    }
+
+    view.innerHTML = `
+        <div class="grid grid-2">
+            <div class="card">
+                <h3>إضافة سند جديد</h3>
+                <select class="select" id="voucher-type">
+                    <option value="إيداع">إيداع</option>
+                    <option value="سحب">سحب</option>
+                    <option value="تحويل">تحويل</option>
+                </select>
+                <select class="select" id="voucher-safe">
+                    <option value="">اختر الخزنة</option>
+                    ${(state.safes || []).map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
+                </select>
+                <input class="input" id="voucher-amount" placeholder="المبلغ">
+                <input class="input" id="voucher-date" type="date">
+                <textarea class="input" id="voucher-description" placeholder="الوصف" rows="2"></textarea>
+                <button class="btn" id="add-voucher-btn">حفظ</button>
+            </div>
+            <div class="card">
+                <h3>السندات</h3>
+                <div class="tools">
+                    <input class="input" id="voucher-q" placeholder="بحث..." oninput="draw()" style="width: 200px; margin-bottom: 0;">
+                </div>
+                <div id="voucher-list"></div>
+            </div>
+        </div>`;
+
+    draw();
+
+    // Event Listeners
+    document.getElementById('add-voucher-btn').onclick = async () => {
+        const type = document.getElementById('voucher-type').value;
+        const safeId = document.getElementById('voucher-safe').value;
+        const amount = document.getElementById('voucher-amount').value.trim();
+        const date = document.getElementById('voucher-date').value;
+        const description = document.getElementById('voucher-description').value.trim();
+        
+        if (!safeId || !amount || !date) {
+            return alert('الرجاء ملء جميع الحقول المطلوبة.');
+        }
+
+        saveState();
+        const newVoucher = {
+            id: uid('V'),
+            type,
+            safeId,
+            amount: parseNumber(amount),
+            date,
+            description
+        };
+        
+        if (!state.vouchers) state.vouchers = [];
+        state.vouchers.push(newVoucher);
+        logAction('إضافة سند جديد', { id: newVoucher.id, type: newVoucher.type, amount: newVoucher.amount });
+        
+        await persist();
+
+        // Clear form
+        document.getElementById('voucher-type').value = 'إيداع';
+        document.getElementById('voucher-safe').value = '';
+        document.getElementById('voucher-amount').value = '';
+        document.getElementById('voucher-date').value = '';
+        document.getElementById('voucher-description').value = '';
+        
+        draw();
+    };
 }
 
 function renderPartners() {
-    view.innerHTML = '<div class="card"><h2>الشركاء</h2><p>قريباً...</p></div>';
+    let sort = { idx: 0, dir: 'asc' };
+
+    function draw() {
+        const query = (document.getElementById('partner-q')?.value || '').trim().toLowerCase();
+        let list = state.partners?.slice() || [];
+        
+        if (query) {
+            list = list.filter(partner => {
+                const searchable = `${partner.name || ''} ${partner.phone || ''} ${partner.share || ''}`.toLowerCase();
+                return searchable.includes(query);
+            });
+        }
+        
+        list.sort((a, b) => {
+            const colsA = [a.name || '', a.phone || '', a.share || '', a.status || ''];
+            const colsB = [b.name || '', b.phone || '', b.share || '', b.status || ''];
+            return (colsA[sort.idx] + '').localeCompare(colsB[sort.idx] + '') * (sort.dir === 'asc' ? 1 : -1);
+        });
+        
+        const rows = list.map(partner => [
+            partner.name || '',
+            partner.phone || '',
+            partner.share || '0%',
+            partner.status || 'نشط',
+            `<button class="btn secondary" onclick="delRow('partners', '${partner.id}')">حذف</button>`
+        ]);
+        
+        document.getElementById('partner-list').innerHTML = table(
+            ['اسم الشريك', 'الهاتف', 'نسبة المشاركة', 'الحالة', ''],
+            rows,
+            sort,
+            (newSort) => {
+                sort = newSort;
+                draw();
+            }
+        );
+    }
+
+    view.innerHTML = `
+        <div class="grid grid-2">
+            <div class="card">
+                <h3>إضافة شريك</h3>
+                <input class="input" id="partner-name" placeholder="اسم الشريك">
+                <input class="input" id="partner-phone" placeholder="رقم الهاتف">
+                <input class="input" id="partner-share" placeholder="نسبة المشاركة (%)">
+                <select class="select" id="partner-status">
+                    <option value="نشط">نشط</option>
+                    <option value="موقوف">موقوف</option>
+                </select>
+                <textarea class="input" id="partner-notes" placeholder="ملاحظات" rows="2"></textarea>
+                <button class="btn" id="add-partner-btn">حفظ</button>
+            </div>
+            <div class="card">
+                <h3>الشركاء</h3>
+                <div class="tools">
+                    <input class="input" id="partner-q" placeholder="بحث..." oninput="draw()" style="width: 200px; margin-bottom: 0;">
+                </div>
+                <div id="partner-list"></div>
+            </div>
+        </div>`;
+
+    draw();
+
+    // Event Listeners
+    document.getElementById('add-partner-btn').onclick = async () => {
+        const name = document.getElementById('partner-name').value.trim();
+        const phone = document.getElementById('partner-phone').value.trim();
+        const share = document.getElementById('partner-share').value.trim();
+        const status = document.getElementById('partner-status').value;
+        const notes = document.getElementById('partner-notes').value.trim();
+        
+        if (!name || !phone) {
+            return alert('الرجاء إدخال اسم الشريك ورقم الهاتف.');
+        }
+
+        saveState();
+        const newPartner = {
+            id: uid('P'),
+            name,
+            phone,
+            share: parseNumber(share),
+            status,
+            notes
+        };
+        
+        if (!state.partners) state.partners = [];
+        state.partners.push(newPartner);
+        logAction('إضافة شريك جديد', { id: newPartner.id, name: newPartner.name });
+        
+        await persist();
+
+        // Clear form
+        document.getElementById('partner-name').value = '';
+        document.getElementById('partner-phone').value = '';
+        document.getElementById('partner-share').value = '';
+        document.getElementById('partner-notes').value = '';
+        
+        draw();
+    };
 }
 
 function renderTreasury() {
-    view.innerHTML = '<div class="card"><h2>الخزينة</h2><p>قريباً...</p></div>';
+    const totalBalance = state.safes?.reduce((sum, safe) => sum + (safe.balance || 0), 0) || 0;
+    const totalDeposits = state.vouchers?.filter(v => v.type === 'إيداع').reduce((sum, v) => sum + (v.amount || 0), 0) || 0;
+    const totalWithdrawals = state.vouchers?.filter(v => v.type === 'سحب').reduce((sum, v) => sum + (v.amount || 0), 0) || 0;
+    
+    view.innerHTML = `
+        <div class="grid grid-4" style="margin-bottom: 20px;">
+            <div class="card">
+                <h3>إجمالي الرصيد</h3>
+                <div style="font-size: 24px; font-weight: bold; color: #007bff;">${egp(totalBalance)}</div>
+            </div>
+            <div class="card">
+                <h3>إجمالي الإيداعات</h3>
+                <div style="font-size: 24px; font-weight: bold; color: #28a745;">${egp(totalDeposits)}</div>
+            </div>
+            <div class="card">
+                <h3>إجمالي السحوبات</h3>
+                <div style="font-size: 24px; font-weight: bold; color: #dc3545;">${egp(totalWithdrawals)}</div>
+            </div>
+            <div class="card">
+                <h3>عدد الخزائن</h3>
+                <div style="font-size: 24px; font-weight: bold; color: #ffc107;">${state.safes?.length || 0}</div>
+            </div>
+        </div>
+        
+        <div class="grid grid-2">
+            <div class="card">
+                <h3>إضافة خزنة جديدة</h3>
+                <input class="input" id="safe-name" placeholder="اسم الخزنة">
+                <input class="input" id="safe-balance" placeholder="الرصيد الافتتاحي">
+                <textarea class="input" id="safe-notes" placeholder="ملاحظات" rows="2"></textarea>
+                <button class="btn" id="add-safe-btn">حفظ</button>
+            </div>
+            <div class="card">
+                <h3>الخزائن</h3>
+                <div id="safe-list">
+                    ${(state.safes || []).map(safe => `
+                        <div class="card" style="margin-bottom: 10px;">
+                            <h4>${safe.name}</h4>
+                            <div style="font-size: 20px; font-weight: bold;">${egp(safe.balance || 0)}</div>
+                            <button class="btn secondary" onclick="editSafe('${safe.id}')">تعديل</button>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        </div>
+    `;
+
+    // Event Listeners
+    document.getElementById('add-safe-btn').onclick = async () => {
+        const name = document.getElementById('safe-name').value.trim();
+        const balance = document.getElementById('safe-balance').value.trim();
+        const notes = document.getElementById('safe-notes').value.trim();
+        
+        if (!name) {
+            return alert('الرجاء إدخال اسم الخزنة.');
+        }
+
+        saveState();
+        const newSafe = {
+            id: uid('S'),
+            name,
+            balance: parseNumber(balance),
+            notes
+        };
+        
+        if (!state.safes) state.safes = [];
+        state.safes.push(newSafe);
+        logAction('إضافة خزنة جديدة', { id: newSafe.id, name: newSafe.name });
+        
+        await persist();
+
+        // Clear form
+        document.getElementById('safe-name').value = '';
+        document.getElementById('safe-balance').value = '';
+        document.getElementById('safe-notes').value = '';
+        
+        // Refresh the page
+        renderTreasury();
+    };
 }
 
 function renderReports() {
-    view.innerHTML = '<div class="card"><h2>التقارير</h2><p>قريباً...</p></div>';
+    view.innerHTML = `
+        <div class="grid grid-2">
+            <div class="card">
+                <h3>التقارير التفصيلية</h3>
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                    <button class="btn" onclick="generateReport('units')">تقرير الوحدات</button>
+                    <button class="btn" onclick="generateReport('customers')">تقرير العملاء</button>
+                    <button class="btn" onclick="generateReport('contracts')">تقرير العقود</button>
+                    <button class="btn" onclick="generateReport('installments')">تقرير الأقساط</button>
+                    <button class="btn" onclick="generateReport('treasury')">تقرير الخزينة</button>
+                    <button class="btn" onclick="generateReport('partners')">تقرير الشركاء</button>
+                </div>
+            </div>
+            <div class="card">
+                <h3>التقارير السريعة</h3>
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                    <button class="btn secondary" onclick="generateQuickReport('overdue')">الأقساط المتأخرة</button>
+                    <button class="btn secondary" onclick="generateQuickReport('revenue')">الإيرادات الشهرية</button>
+                    <button class="btn secondary" onclick="generateQuickReport('units-status')">حالة الوحدات</button>
+                    <button class="btn secondary" onclick="generateQuickReport('contracts-summary')">ملخص العقود</button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function generateReport(type) {
+    switch(type) {
+        case 'units':
+            generateUnitsReport();
+            break;
+        case 'customers':
+            generateCustomersReport();
+            break;
+        case 'contracts':
+            generateContractsReport();
+            break;
+        case 'installments':
+            generateInstallmentsReport();
+            break;
+        case 'treasury':
+            generateTreasuryReport();
+            break;
+        case 'partners':
+            generatePartnersReport();
+            break;
+        default:
+            alert('نوع التقرير غير معروف');
+    }
+}
+
+function generateQuickReport(type) {
+    switch(type) {
+        case 'overdue':
+            generateOverdueReport();
+            break;
+        case 'revenue':
+            generateRevenueReport();
+            break;
+        case 'units-status':
+            generateUnitsStatusReport();
+            break;
+        case 'contracts-summary':
+            generateContractsSummaryReport();
+            break;
+        default:
+            alert('نوع التقرير السريع غير معروف');
+    }
+}
+
+function generateUnitsReport() {
+    const units = state.units || [];
+    const html = `
+        <h1>تقرير الوحدات العقارية</h1>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>اسم الوحدة</th>
+                    <th>الرمز</th>
+                    <th>العمارة</th>
+                    <th>الدور</th>
+                    <th>المساحة</th>
+                    <th>السعر</th>
+                    <th>الحالة</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${units.map(unit => `
+                    <tr>
+                        <td>${unit.name || ''}</td>
+                        <td>${unit.code || ''}</td>
+                        <td>${unit.building || ''}</td>
+                        <td>${unit.floor || ''}</td>
+                        <td>${unit.area || 0} م²</td>
+                        <td>${egp(unit.price)}</td>
+                        <td>${unit.status || ''}</td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    `;
+    printHTML('تقرير الوحدات العقارية', html);
+}
+
+function generateCustomersReport() {
+    const customers = state.customers || [];
+    const html = `
+        <h1>تقرير العملاء</h1>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>اسم العميل</th>
+                    <th>الهاتف</th>
+                    <th>الرقم القومي</th>
+                    <th>العنوان</th>
+                    <th>الحالة</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${customers.map(customer => `
+                    <tr>
+                        <td>${customer.name || ''}</td>
+                        <td>${customer.phone || ''}</td>
+                        <td>${customer.nationalId || ''}</td>
+                        <td>${customer.address || ''}</td>
+                        <td>${customer.status || ''}</td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    `;
+    printHTML('تقرير العملاء', html);
+}
+
+function generateContractsReport() {
+    const contracts = state.contracts || [];
+    const html = `
+        <h1>تقرير العقود</h1>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>الوحدة</th>
+                    <th>العميل</th>
+                    <th>النوع</th>
+                    <th>تاريخ البداية</th>
+                    <th>قيمة العقد</th>
+                    <th>الحالة</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${contracts.map(contract => {
+                    const unit = unitById(contract.unitId);
+                    const customer = custById(contract.customerId);
+                    return `
+                        <tr>
+                            <td>${unit?.name || ''}</td>
+                            <td>${customer?.name || ''}</td>
+                            <td>${contract.type || ''}</td>
+                            <td>${contract.startDate || ''}</td>
+                            <td>${egp(contract.amount)}</td>
+                            <td>${contract.status || ''}</td>
+                        </tr>
+                    `;
+                }).join('')}
+            </tbody>
+        </table>
+    `;
+    printHTML('تقرير العقود', html);
+}
+
+function generateInstallmentsReport() {
+    const installments = state.installments || [];
+    const html = `
+        <h1>تقرير الأقساط</h1>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>العقد</th>
+                    <th>المبلغ</th>
+                    <th>تاريخ الاستحقاق</th>
+                    <th>الحالة</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${installments.map(installment => {
+                    const contract = state.contracts?.find(c => c.id === installment.contractId);
+                    const unit = unitById(contract?.unitId);
+                    const customer = custById(contract?.customerId);
+                    return `
+                        <tr>
+                            <td>${unit?.name || ''} - ${customer?.name || ''}</td>
+                            <td>${egp(installment.amount)}</td>
+                            <td>${installment.dueDate || ''}</td>
+                            <td>${installment.paid ? 'مدفوع' : 'غير مدفوع'}</td>
+                        </tr>
+                    `;
+                }).join('')}
+            </tbody>
+        </table>
+    `;
+    printHTML('تقرير الأقساط', html);
+}
+
+function generateTreasuryReport() {
+    const vouchers = state.vouchers || [];
+    const safes = state.safes || [];
+    const html = `
+        <h1>تقرير الخزينة</h1>
+        <h2>الخزائن</h2>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>اسم الخزنة</th>
+                    <th>الرصيد</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${safes.map(safe => `
+                    <tr>
+                        <td>${safe.name || ''}</td>
+                        <td>${egp(safe.balance)}</td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+        
+        <h2>المعاملات المالية</h2>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>التاريخ</th>
+                    <th>النوع</th>
+                    <th>الوصف</th>
+                    <th>المبلغ</th>
+                    <th>الخزنة</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${vouchers.map(voucher => {
+                    const safe = safes.find(s => s.id === voucher.safeId);
+                    return `
+                        <tr>
+                            <td>${voucher.date || ''}</td>
+                            <td>${voucher.type || ''}</td>
+                            <td>${voucher.description || ''}</td>
+                            <td>${egp(voucher.amount)}</td>
+                            <td>${safe?.name || ''}</td>
+                        </tr>
+                    `;
+                }).join('')}
+            </tbody>
+        </table>
+    `;
+    printHTML('تقرير الخزينة', html);
+}
+
+function generatePartnersReport() {
+    const partners = state.partners || [];
+    const html = `
+        <h1>تقرير الشركاء</h1>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>اسم الشريك</th>
+                    <th>الهاتف</th>
+                    <th>نسبة المشاركة</th>
+                    <th>الحالة</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${partners.map(partner => `
+                    <tr>
+                        <td>${partner.name || ''}</td>
+                        <td>${partner.phone || ''}</td>
+                        <td>${partner.share || 0}%</td>
+                        <td>${partner.status || ''}</td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    `;
+    printHTML('تقرير الشركاء', html);
+}
+
+function generateOverdueReport() {
+    const overdueInstallments = state.installments?.filter(i => !i.paid && new Date(i.dueDate) < new Date()) || [];
+    const html = `
+        <h1>تقرير الأقساط المتأخرة</h1>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>العقد</th>
+                    <th>المبلغ</th>
+                    <th>تاريخ الاستحقاق</th>
+                    <th>أيام التأخير</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${overdueInstallments.map(installment => {
+                    const contract = state.contracts?.find(c => c.id === installment.contractId);
+                    const unit = unitById(contract?.unitId);
+                    const customer = custById(contract?.customerId);
+                    const daysOverdue = Math.floor((new Date() - new Date(installment.dueDate)) / (1000 * 60 * 60 * 24));
+                    return `
+                        <tr>
+                            <td>${unit?.name || ''} - ${customer?.name || ''}</td>
+                            <td>${egp(installment.amount)}</td>
+                            <td>${installment.dueDate || ''}</td>
+                            <td>${daysOverdue} يوم</td>
+                        </tr>
+                    `;
+                }).join('')}
+            </tbody>
+        </table>
+    `;
+    printHTML('تقرير الأقساط المتأخرة', html);
+}
+
+function generateRevenueReport() {
+    const installments = state.installments || [];
+    const currentMonth = new Date().getMonth();
+    const currentYear = new Date().getFullYear();
+    
+    const monthlyRevenue = installments
+        .filter(i => i.paid && new Date(i.dueDate).getMonth() === currentMonth && new Date(i.dueDate).getFullYear() === currentYear)
+        .reduce((sum, i) => sum + (i.amount || 0), 0);
+    
+    const html = `
+        <h1>تقرير الإيرادات الشهرية</h1>
+        <h2>إيرادات ${currentMonth + 1}/${currentYear}</h2>
+        <p>إجمالي الإيرادات: ${egp(monthlyRevenue)}</p>
+    `;
+    printHTML('تقرير الإيرادات الشهرية', html);
+}
+
+function generateUnitsStatusReport() {
+    const units = state.units || [];
+    const statusCounts = units.reduce((acc, unit) => {
+        acc[unit.status] = (acc[unit.status] || 0) + 1;
+        return acc;
+    }, {});
+    
+    const html = `
+        <h1>تقرير حالة الوحدات</h1>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>الحالة</th>
+                    <th>العدد</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${Object.entries(statusCounts).map(([status, count]) => `
+                    <tr>
+                        <td>${status}</td>
+                        <td>${count}</td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    `;
+    printHTML('تقرير حالة الوحدات', html);
+}
+
+function generateContractsSummaryReport() {
+    const contracts = state.contracts || [];
+    const activeContracts = contracts.filter(c => c.status === 'نشط').length;
+    const totalValue = contracts.reduce((sum, c) => sum + (c.amount || 0), 0);
+    
+    const html = `
+        <h1>ملخص العقود</h1>
+        <p>إجمالي العقود: ${contracts.length}</p>
+        <p>العقود النشطة: ${activeContracts}</p>
+        <p>إجمالي قيمة العقود: ${egp(totalValue)}</p>
+    `;
+    printHTML('ملخص العقود', html);
 }
 
 function renderPartnerDebts() {
@@ -826,11 +1794,179 @@ function renderPartnerDebts() {
 }
 
 function renderAuditLog() {
-    view.innerHTML = '<div class="card"><h2>سجل التغييرات</h2><p>قريباً...</p></div>';
+    let sort = { idx: 0, dir: 'desc' }; // Default to newest first
+
+    function draw() {
+        const query = (document.getElementById('audit-q')?.value || '').trim().toLowerCase();
+        let list = state.auditLog?.slice() || [];
+        
+        if (query) {
+            list = list.filter(log => {
+                const searchable = `${log.description || ''} ${log.timestamp || ''}`.toLowerCase();
+                return searchable.includes(query);
+            });
+        }
+        
+        list.sort((a, b) => {
+            const colsA = [a.timestamp || '', a.description || ''];
+            const colsB = [b.timestamp || '', b.description || ''];
+            return (colsA[sort.idx] + '').localeCompare(colsB[sort.idx] + '') * (sort.dir === 'asc' ? 1 : -1);
+        });
+        
+        const rows = list.map(log => [
+            new Date(log.timestamp).toLocaleString('ar-EG'),
+            log.description || '',
+            JSON.stringify(log.details || {}).substring(0, 50) + '...'
+        ]);
+        
+        document.getElementById('audit-list').innerHTML = table(
+            ['التاريخ والوقت', 'الوصف', 'التفاصيل'],
+            rows,
+            sort,
+            (newSort) => {
+                sort = newSort;
+                draw();
+            }
+        );
+    }
+
+    view.innerHTML = `
+        <div class="card">
+            <h2>سجل التغييرات</h2>
+            <div class="tools">
+                <input class="input" id="audit-q" placeholder="بحث..." oninput="draw()" style="width: 200px; margin-bottom: 0;">
+                <button class="btn" id="clear-audit-btn">مسح السجل</button>
+            </div>
+            <div id="audit-list"></div>
+        </div>`;
+
+    draw();
+
+    // Event Listeners
+    document.getElementById('clear-audit-btn').onclick = async () => {
+        if (confirm('هل أنت متأكد من مسح سجل التغييرات؟')) {
+            saveState();
+            state.auditLog = [];
+            await persist();
+            draw();
+        }
+    };
 }
 
 function renderBackup() {
-    view.innerHTML = '<div class="card"><h2>نسخة احتياطية</h2><p>قريباً...</p></div>';
+    view.innerHTML = `
+        <div class="grid grid-2">
+            <div class="card">
+                <h3>تصدير البيانات</h3>
+                <p>قم بإنشاء نسخة احتياطية من جميع البيانات</p>
+                <button class="btn" id="export-backup-btn">تصدير البيانات</button>
+                <button class="btn secondary" id="export-csv-btn">تصدير CSV</button>
+            </div>
+            <div class="card">
+                <h3>استيراد البيانات</h3>
+                <p>استعادة البيانات من ملف نسخة احتياطية</p>
+                <label class="btn secondary">
+                    <input type="file" id="import-backup-input" accept=".json" style="display:none">
+                    اختيار ملف
+                </label>
+                <button class="btn" id="import-backup-btn" disabled>استيراد البيانات</button>
+            </div>
+        </div>
+        
+        <div class="card" style="margin-top: 20px;">
+            <h3>إحصائيات البيانات</h3>
+            <div class="grid grid-4">
+                <div>العملاء: ${state.customers?.length || 0}</div>
+                <div>الوحدات: ${state.units?.length || 0}</div>
+                <div>العقود: ${state.contracts?.length || 0}</div>
+                <div>الأقساط: ${state.installments?.length || 0}</div>
+            </div>
+        </div>
+    `;
+
+    // Event Listeners
+    document.getElementById('export-backup-btn').onclick = () => {
+        const dataStr = JSON.stringify(state, null, 2);
+        const dataBlob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(dataBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `estate-backup-${new Date().toISOString().slice(0, 10)}.json`;
+        link.click();
+        URL.revokeObjectURL(url);
+    };
+
+    document.getElementById('export-csv-btn').onclick = () => {
+        // Export all data as CSV
+        const csvData = exportAllDataAsCSV();
+        const dataBlob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(dataBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `estate-data-${new Date().toISOString().slice(0, 10)}.csv`;
+        link.click();
+        URL.revokeObjectURL(url);
+    };
+
+    document.getElementById('import-backup-input').onchange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            document.getElementById('import-backup-btn').disabled = false;
+        }
+    };
+
+    document.getElementById('import-backup-btn').onclick = async () => {
+        const file = document.getElementById('import-backup-input').files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            try {
+                const importedData = JSON.parse(e.target.result);
+                if (confirm('سيتم استبدال جميع البيانات الحالية. هل أنت متأكد؟')) {
+                    saveState();
+                    Object.assign(state, importedData);
+                    await persist();
+                    alert('تم استيراد البيانات بنجاح');
+                    location.reload();
+                }
+            } catch (error) {
+                alert('خطأ في قراءة الملف');
+            }
+        };
+        reader.readAsText(file);
+    };
+}
+
+function exportAllDataAsCSV() {
+    const csvData = [];
+    
+    // Add customers
+    csvData.push('العملاء');
+    csvData.push('الاسم,الهاتف,الرقم القومي,العنوان,الحالة');
+    (state.customers || []).forEach(customer => {
+        csvData.push(`${customer.name || ''},${customer.phone || ''},${customer.nationalId || ''},${customer.address || ''},${customer.status || ''}`);
+    });
+    csvData.push('');
+    
+    // Add units
+    csvData.push('الوحدات');
+    csvData.push('الاسم,الرمز,العمارة,الدور,المساحة,السعر,الحالة');
+    (state.units || []).forEach(unit => {
+        csvData.push(`${unit.name || ''},${unit.code || ''},${unit.building || ''},${unit.floor || ''},${unit.area || ''},${unit.price || ''},${unit.status || ''}`);
+    });
+    csvData.push('');
+    
+    // Add contracts
+    csvData.push('العقود');
+    csvData.push('الوحدة,العميل,النوع,تاريخ البداية,قيمة العقد,الحالة');
+    (state.contracts || []).forEach(contract => {
+        const unit = unitById(contract.unitId);
+        const customer = custById(contract.customerId);
+        csvData.push(`${unit?.name || ''},${customer?.name || ''},${contract.type || ''},${contract.startDate || ''},${contract.amount || ''},${contract.status || ''}`);
+    });
+    
+    return csvData.join('\n');
 }
 
 function renderUnitDetails(unitId) {
@@ -855,4 +1991,46 @@ function renderCustomerDetails(customerId) {
 
 function renderUnitEdit(unitId) {
     view.innerHTML = '<div class="card"><h2>تعديل الوحدة</h2><p>قريباً...</p></div>';
+}
+
+async function toggleInstallmentPayment(installmentId) {
+    const installment = state.installments?.find(i => i.id === installmentId);
+    if (!installment) return;
+
+    if (installment.paid) {
+        // Cancel payment
+        if (confirm('هل أنت متأكد من إلغاء الدفع؟')) {
+            saveState();
+            installment.paid = false;
+            installment.paymentDate = null;
+            installment.penalty = 0;
+            logAction('إلغاء دفع قسط', { 
+                id: installment.id, 
+                amount: installment.amount 
+            });
+            await persist();
+            renderInstallments();
+        }
+    } else {
+        // Record payment
+        const paymentDate = prompt('تاريخ الدفع (YYYY-MM-DD):', today());
+        const penalty = prompt('الغرامة (إذا وجدت):', '0');
+        const paymentMethod = prompt('طريقة الدفع:', installment.paymentMethod || 'نقداً');
+        
+        if (paymentDate) {
+            saveState();
+            installment.paid = true;
+            installment.paymentDate = paymentDate;
+            installment.penalty = parseNumber(penalty);
+            installment.paymentMethod = paymentMethod;
+            logAction('تسجيل دفع قسط', { 
+                id: installment.id, 
+                amount: installment.amount,
+                paymentDate,
+                penalty: installment.penalty
+            });
+            await persist();
+            renderInstallments();
+        }
+    }
 }
