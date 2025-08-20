@@ -1,129 +1,43 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl" data-theme="dark">
+<html lang="ar" dir="rtl">
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="مدير الاستثمار العقاري - تطبيق شامل لإدارة العقارات والعقود والأقساط">
-    <meta name="author" content="Jules">
-    
-    <title>مدير الاستثمار العقاري — النسخة النهائية (محلي) — محدثة</title>
-    
-    <!-- External Libraries -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.1/dist/chart.min.js"></script>
-    <script src="https://unpkg.com/htmx.org@1.9.10" 
-            integrity="sha384-D1Kt99CQMDuVetoL1lrYwg5t+9QdHe7NLX/SoJYkXDFfX37iInKRy5xLSi8nO7UC" 
-            crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/sql-wasm.js"></script>
-    
-    <!-- PWA Manifest -->
-    <link rel="manifest" href="manifest.json">
-    
-    <!-- Stylesheets -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام إدارة العقارات</title>
     <link rel="stylesheet" href="style.css">
-    
-    <!-- Favicon -->
-    <link rel="icon" type="image/x-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏛️</text></svg>">
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sql.js@1.8.0/dist/sql-wasm.js"></script>
 </head>
 <body>
-    <!-- Main Container -->
-    <div class="container">
-        <!-- Header Section -->
-        <header class="header">
-            <!-- Brand/Logo -->
-            <div class="brand">
-                <div class="logo" aria-label="شعار التطبيق">🏛️</div>
-                <h1>مدير الاستثمار العقاري — النسخة النهائية</h1>
-            </div>
-            
-            <!-- Header Tools -->
+    <div id="app">
+        <header>
+            <h1>نظام إدارة العقارات</h1>
             <div class="tools">
-                <!-- Undo/Redo Controls -->
-                <button class="btn secondary" id="undoBtn" disabled title="تراجع (Ctrl+Z)">
-                    ↪️ تراجع
-                </button>
-                <button class="btn secondary" id="redoBtn" disabled title="تقدم (Ctrl+Y)">
-                    ↩️ تقدم
-                </button>
-                
-                <!-- Theme Selection -->
-                <select class="select" id="themeSel" title="اختر المظهر">
+                <select id="themeSel">
                     <option value="dark">داكن</option>
                     <option value="light">فاتح</option>
                 </select>
-                
-                <!-- Font Size Selection -->
-                <select class="select" id="fontSel" title="اختر حجم الخط">
-                    <option value="14">خط 14</option>
-                    <option value="16" selected>خط 16</option>
-                    <option value="18">خط 18</option>
+                <select id="fontSel">
+                    <option value="14">صغير</option>
+                    <option value="16">متوسط</option>
+                    <option value="18">كبير</option>
                 </select>
-                
-                <!-- Lock Button -->
-                <button class="btn secondary" id="lockBtn" title="قفل التطبيق">
-                    🔒 قفل
-                </button>
+                <button id="lockBtn">قفل</button>
+                <button id="undoBtn" disabled>تراجع</button>
+                <button id="redoBtn" disabled>إعادة</button>
             </div>
         </header>
         
-        <!-- Main Layout -->
-        <main class="main-layout">
-            <!-- Sidebar Navigation -->
-            <nav class="sidebar" id="tabs" role="navigation" aria-label="القائمة الرئيسية">
-                <!-- Navigation tabs will be dynamically generated here -->
-            </nav>
-            
-            <!-- Main Content Area -->
-            <section class="content" id="view" role="main" aria-label="المحتوى الرئيسي">
-                <!-- Page content will be dynamically rendered here -->
-            </section>
-        </main>
+        <nav id="tabs"></nav>
         
-        <!-- Footer -->
-        <footer style="text-align: center; color: var(--muted); font-size: 12px; margin-top: 10px;">
-            💾 LocalStorage • PDF/CSV • بحث/فرز/تعديل مباشر • أقساط مرنة • عمولة/صيانة • تدفقات نقدية • فلاتر تاريخ للتقارير
-        </footer>
+        <main id="view">
+            <!-- Content will be loaded here -->
+        </main>
     </div>
     
-    <!-- Scripts -->
-    <!-- Database operations -->
     <script src="db.js"></script>
-    
-    <!-- Main application logic -->
     <script src="app.js"></script>
-    
-    <!-- Service Worker Registration -->
-    <script>
-        // Register service worker for PWA functionality
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js')
-                    .then(registration => {
-                        console.log('ServiceWorker registration successful:', registration);
-                    })
-                    .catch(error => {
-                        console.error('ServiceWorker registration failed:', error);
-                    });
-            });
-        }
-        
-        // Add loading indicator
-        document.addEventListener('DOMContentLoaded', () => {
-            // Show loading state
-            const view = document.getElementById('view');
-            if (view) {
-                view.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--muted);">جاري تحميل التطبيق...</div>';
-            }
-        });
-        
-        // Handle offline/online status
-        window.addEventListener('online', () => {
-            console.log('Application is online');
-        });
-        
-        window.addEventListener('offline', () => {
-            console.log('Application is offline');
-        });
-    </script>
 </body>
 </html>
